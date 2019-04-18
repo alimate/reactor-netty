@@ -19,12 +19,13 @@ package reactor.netty.resources;
 import java.net.SocketAddress;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.pool.FixedChannelPool;
-import io.netty.channel.pool.SimpleChannelPool;
+import io.netty.channel.Channel;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.netty.Connection;
 import reactor.netty.ReactorNetty;
+import reactor.pool.InstrumentedPool;
+import reactor.pool.PoolBuilder;
 import reactor.util.annotation.NonNull;
 
 /**
@@ -79,11 +80,11 @@ public interface ConnectionProvider extends Disposable {
 	 */
 	static ConnectionProvider elastic(String name) {
 		return new PooledConnectionProvider(name,
-				(bootstrap, handler, checker) -> new SimpleChannelPool(bootstrap,
-						handler,
-						checker,
-						true,
-						false));
+				(allocator, destroyHandler, evictionPredicate) ->
+				        (InstrumentedPool<Channel>) PoolBuilder.from(allocator)
+				                   .destroyHandler(destroyHandler)
+				                   .evictionPredicate(evictionPredicate)
+				                   .build());
 	}
 
 	/**
@@ -143,15 +144,14 @@ public interface ConnectionProvider extends Disposable {
 			throw new IllegalArgumentException("Acquire Timeout value must " + "be " + "positive");
 		}
 		return new PooledConnectionProvider(name,
-				(bootstrap, handler, checker) -> new FixedChannelPool(bootstrap,
-						handler,
-						checker,
-						FixedChannelPool.AcquireTimeoutAction.FAIL,
-						acquireTimeout,
-						maxConnections,
-						Integer.MAX_VALUE,
-						true,
-						false),
+				(allocator, destroyHandler, evictionPredicate) ->
+				        (InstrumentedPool<Channel>) PoolBuilder.from(allocator)
+				                   .sizeMax(maxConnections)
+				                   .maxPendingAcquireUnbounded()
+				                   .destroyHandler(destroyHandler)
+				                   .evictionPredicate(evictionPredicate)
+				                   .build(),
+				acquireTimeout,
 				maxConnections);
 	}
 
